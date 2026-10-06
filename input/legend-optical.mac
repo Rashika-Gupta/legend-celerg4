@@ -1,0 +1,13 @@
+# Batch execution for the LEGEND optical integration
+/tracking/verbose 0
+/control/verbose 0
+/run/verbose 0
+
+# Geant4 analysis supports CSV, ROOT, and HDF5 output extensions.
+/legend/output/file legend.root
+
+# Fixed source point for this standalone geometry example.
+/gps/pos/type Point
+/gps/pos/centre -16.30 50.17 349.11 mm
+
+/run/beamOn 1
