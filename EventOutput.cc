@@ -28,7 +28,8 @@ namespace legend
         enum class NtupleId : G4int
         {
             optical_hits,
-            event_summary
+            event_summary,
+            fiber_hits
         };
 
         enum class HitColumn : G4int
@@ -46,11 +47,25 @@ namespace legend
             wavelength_nm
         };
 
+        enum class FiberHitColumn : G4int
+        {
+            event_id,
+            volume_instance_id,
+            volume_name,
+            x_cm,
+            y_cm,
+            z_cm,
+            time_s,
+            energy_mev,
+            wavelength_nm
+        };
+
         enum class SummaryColumn : G4int
         {
             event_id,
             elapsed_time_s,
-            num_optical_hits
+            num_optical_hits,
+            num_fiber_hits
         };
 
         template <class T>
@@ -92,6 +107,19 @@ namespace legend
         manager.CreateNtupleIColumn("event_id");
         manager.CreateNtupleDColumn("elapsed_time_s");
         manager.CreateNtupleIColumn("num_optical_hits");
+        manager.CreateNtupleIColumn("num_fiber_hits");
+        manager.FinishNtuple();
+
+        manager.CreateNtuple("fiber_hits", "LEGEND optical fiber contacts");
+        manager.CreateNtupleIColumn("event_id");
+        manager.CreateNtupleIColumn("volume_instance_id");
+        manager.CreateNtupleSColumn("volume_name");
+        manager.CreateNtupleDColumn("x_cm");
+        manager.CreateNtupleDColumn("y_cm");
+        manager.CreateNtupleDColumn("z_cm");
+        manager.CreateNtupleDColumn("time_s");
+        manager.CreateNtupleDColumn("energy_mev");
+        manager.CreateNtupleDColumn("wavelength_nm");
         manager.FinishNtuple();
     }
 
@@ -100,6 +128,7 @@ namespace legend
     void EventOutput::reset()
     {
         hits_.clear();
+        fiber_hits_.clear();
         event_time_ = 0;
     }
 
@@ -127,6 +156,20 @@ namespace legend
 
     //---------------------------------------------------------------------------//
 
+    void EventOutput::add_fiber_hit(OpticalFiberHit hit)
+    {
+        fiber_hits_.push_back(std::move(hit));
+    }
+
+    //---------------------------------------------------------------------------//
+
+    void EventOutput::add_fiber_hits(std::vector<OpticalFiberHit> const &hits)
+    {
+        fiber_hits_.insert(fiber_hits_.end(), hits.begin(), hits.end());
+    }
+
+    //---------------------------------------------------------------------------//
+
     void EventOutput::write_event()
     {
         G4AutoLock lock(&output_mutex);
@@ -137,7 +180,7 @@ namespace legend
         for (auto const &record : hits_)
         {
             CELER_ASSERT(record.detector_id >= 0);
-            CELER_ASSERT(record.primary_id >= 0);
+            //            CELER_ASSERT(record.primary_id >= 0);
             CELER_ASSERT(record.volume_instance_id >= 0);
             CELER_ASSERT(record.energy_mev > 0);
 
@@ -146,9 +189,9 @@ namespace legend
             manager->FillNtupleIColumn(hit_ntuple,
                                        to_int(HitColumn::detector_id),
                                        record.detector_id);
-            manager->FillNtupleIColumn(hit_ntuple,
-                                       to_int(HitColumn::primary_id),
-                                       record.primary_id);
+            //            manager->FillNtupleIColumn(hit_ntuple,
+            //                                       to_int(HitColumn::primary_id),
+            //                                       record.primary_id);
             manager->FillNtupleIColumn(hit_ntuple,
                                        to_int(HitColumn::volume_instance_id),
                                        record.volume_instance_id);
@@ -170,6 +213,51 @@ namespace legend
             manager->AddNtupleRow(hit_ntuple);
         }
 
+        G4int const fiber_ntuple = to_int(NtupleId::fiber_hits);
+        for (auto const &record : fiber_hits_)
+        {
+            CELER_ASSERT(record.volume_instance_id >= 0);
+            CELER_ASSERT(record.energy_mev > 0);
+
+            manager->FillNtupleIColumn(
+                fiber_ntuple,
+                to_int(FiberHitColumn::event_id),
+                record.event_id);
+            manager->FillNtupleIColumn(
+                fiber_ntuple,
+                to_int(FiberHitColumn::volume_instance_id),
+                record.volume_instance_id);
+            manager->FillNtupleSColumn(
+                fiber_ntuple,
+                to_int(FiberHitColumn::volume_name),
+                record.volume_name);
+            manager->FillNtupleDColumn(
+                fiber_ntuple,
+                to_int(FiberHitColumn::x_cm),
+                record.position_cm[0]);
+            manager->FillNtupleDColumn(
+                fiber_ntuple,
+                to_int(FiberHitColumn::y_cm),
+                record.position_cm[1]);
+            manager->FillNtupleDColumn(
+                fiber_ntuple,
+                to_int(FiberHitColumn::z_cm),
+                record.position_cm[2]);
+            manager->FillNtupleDColumn(
+                fiber_ntuple,
+                to_int(FiberHitColumn::time_s),
+                record.time_s);
+            manager->FillNtupleDColumn(
+                fiber_ntuple,
+                to_int(FiberHitColumn::energy_mev),
+                record.energy_mev);
+            manager->FillNtupleDColumn(
+                fiber_ntuple,
+                to_int(FiberHitColumn::wavelength_nm),
+                energy_to_wavelength(record.energy_mev));
+            manager->AddNtupleRow(fiber_ntuple);
+        }
+
         auto const *run_manager = G4RunManager::GetRunManager();
         CELER_ASSERT(run_manager);
         CELER_ASSERT(run_manager->GetCurrentEvent());
@@ -185,6 +273,9 @@ namespace legend
         manager->FillNtupleIColumn(summary_ntuple,
                                    to_int(SummaryColumn::num_optical_hits),
                                    static_cast<G4int>(hits_.size()));
+        manager->FillNtupleIColumn(summary_ntuple,
+                                   to_int(SummaryColumn::num_fiber_hits),
+                                   static_cast<G4int>(fiber_hits_.size()));
         manager->AddNtupleRow(summary_ntuple);
 
         this->reset();

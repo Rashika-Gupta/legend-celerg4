@@ -35,6 +35,20 @@ struct OpticalDetectorHit
 
 //---------------------------------------------------------------------------//
 /*!
+ * Store one optical-photon entry into an outer fiber coating.
+ */
+struct OpticalFiberHit
+{
+    G4int event_id{};
+    G4int volume_instance_id{};
+    std::string volume_name;
+    std::array<double, 3> position_cm{};
+    double time_s{};
+    double energy_mev{};
+};
+
+//---------------------------------------------------------------------------//
+/*!
  * Accumulate and write event-level LEGEND optical output.
  *
  * Each worker thread owns one complete instance through \c event_output.
@@ -57,11 +71,18 @@ class EventOutput
     //! Append detected optical photons to the current event.
     void add_hits(std::vector<OpticalDetectorHit> const& hits);
 
+    //! Append one optical-photon fiber contact to the current event.
+    void add_fiber_hit(OpticalFiberHit hit);
+
+    //! Append optical-photon fiber contacts to the current event.
+    void add_fiber_hits(std::vector<OpticalFiberHit> const& hits);
+
     //! Write and clear the current event.
     void write_event();
 
   private:
     std::vector<OpticalDetectorHit> hits_;
+    std::vector<OpticalFiberHit> fiber_hits_;
     double event_time_{0};
 };
 
