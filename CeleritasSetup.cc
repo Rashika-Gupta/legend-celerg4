@@ -15,6 +15,7 @@
 #include "G4Electron.hh"
 #include "G4Event.hh"
 #include "G4EventManager.hh"
+#include "G4LogicalVolume.hh"
 #include "G4OpticalPhoton.hh"
 #include "G4VPhysicalVolume.hh"
 
@@ -30,6 +31,7 @@
 
 // Local
 #include "EventOutput.hh"
+#include "FiberSensitiveDetector.hh"
 
 namespace legend
 {
@@ -78,7 +80,9 @@ namespace legend
             CELER_VALIDATE(geant_geo, << "Geant4 geometry mapping is unavailable");
 
             std::vector<OpticalDetectorHit> records;
+            std::vector<OpticalFiberHit> fiber_records;
             records.reserve(hits.size());
+            fiber_records.reserve(hits.size());
             for (auto const &hit : hits)
             {
                 CELER_VALIDATE(hit.detector, << "optical hit has no detector ID");
@@ -93,6 +97,21 @@ namespace legend
 
                 double const energy_mev = celeritas::value_as<celeritas::units::MevEnergy>(
                     hit.energy);
+
+                auto const *logical = physical->GetLogicalVolume();
+                CELER_ASSERT(logical);
+                if (logical->GetName() == detail::FiberSensitiveDetector::logical_volume_name())
+                {
+                    fiber_records.push_back(
+                        {event->GetEventID(),
+                         static_cast<G4int>(hit.volume_instance.unchecked_get()),
+                         physical->GetName(),
+                         {hit.position[0], hit.position[1], hit.position[2]},
+                         hit.time,
+                         energy_mev});
+                    continue;
+                }
+
                 records.push_back({event->GetEventID(),
                                    static_cast<G4int>(
                                        hit.detector.unchecked_get()),
@@ -110,7 +129,11 @@ namespace legend
 
             CELER_LOG(debug) << "Buffering " << records.size()
                              << " LEGEND optical detector hits";
-            event_output().add_hits(records);
+            CELER_LOG(debug) << "Buffering " << fiber_records.size()
+                             << " LEGEND optical fiber contacts";
+            auto &output = event_output();
+            output.add_hits(records);
+            output.add_fiber_hits(fiber_records);
         }
     } // namespace
 
@@ -129,7 +152,8 @@ namespace legend
     celeritas::SetupOptions CeleritasSetup::operator()() const
     {
         celeritas::SetupOptions result;
-        result.sd.enabled = false;
+        result.sd.enabled = true;
+        result.sd.ignore_zero_deposition = false;
         result.make_along_step = celeritas::UniformAlongStepFactory();
         result.output_file = input_.diagnostics_file;
 
