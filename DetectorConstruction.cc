@@ -17,14 +17,18 @@
 // Geant4
 #include "G4GDMLParser.hh"
 #include "G4LogicalVolume.hh"
+#include "G4LogicalVolumeStore.hh"
 #include "G4PhysicalVolumeStore.hh"
 #include "G4SDManager.hh"
 #include "G4VPhysicalVolume.hh"
 
 // Celeritas
 #include "corecel/Assert.hh"
+#include "corecel/io/Logger.hh"
 
 // Local
+#include "DiagnosticOpticalSensitiveDetector.hh"
+#include "FiberSensitiveDetector.hh"
 #include "SipmSensitiveDetector.hh"
 
 namespace legend
@@ -53,7 +57,7 @@ namespace legend
     //---------------------------------------------------------------------------//
 
     /*!
-     * Attach the LEGEND SiPM detector using the imported GDML channel metadata.
+     * Attach the LEGEND SiPM detector and outer fiber-coating monitor.
      */
     void DetectorConstruction::ConstructSDandField()
     {
@@ -114,15 +118,82 @@ namespace legend
         CELER_VALIDATE(!logical_volumes.empty(),
                        << "no logical volume contains a configured SiPM");
 
-        auto *sensitive_detector = new detail::SipmSensitiveDetector(std::move(detector_ids));
         auto *detector_manager = G4SDManager::GetSDMpointer();
         CELER_ASSERT(detector_manager);
-        detector_manager->AddNewDetector(sensitive_detector);
+
+        auto *sipm_detector = new detail::SipmSensitiveDetector(std::move(detector_ids));
+        detector_manager->AddNewDetector(sipm_detector);
 
         for (auto *logical_volume : logical_volumes)
         {
             CELER_ASSERT(logical_volume);
-            this->SetSensitiveDetector(logical_volume, sensitive_detector);
+            this->SetSensitiveDetector(logical_volume, sipm_detector);
+        }
+
+        auto *source_volume = physical_store->GetVolume(
+            "liquid_argon_underground", false);
+        CELER_VALIDATE(source_volume,
+                       << "physical volume 'liquid_argon_underground' was not "
+                          "found");
+
+        auto *source_logical = source_volume->GetLogicalVolume();
+        CELER_ASSERT(source_logical);
+        CELER_VALIDATE(!source_logical->GetSensitiveDetector(),
+                       << "source logical volume '"
+                       << source_logical->GetName()
+                       << "' already has a sensitive detector");
+
+        auto *diagnostic_detector
+            = new detail::DiagnosticOpticalSensitiveDetector;
+        detector_manager->AddNewDetector(diagnostic_detector);
+        this->SetSensitiveDetector(source_logical, diagnostic_detector);
+        CELER_ENSURE(source_logical->GetSensitiveDetector()
+                     == diagnostic_detector);
+
+        auto const *source_material = source_logical->GetMaterial();
+        CELER_ASSERT(source_material);
+        CELER_LOG(status)
+            << "Attached optical diagnostic SD to physical volume '"
+            << source_volume->GetName() << "', logical volume '"
+            << source_logical->GetName() << "', material '"
+            << source_material->GetName() << "'";
+
+        auto *logical_store = G4LogicalVolumeStore::GetInstance();
+        CELER_ASSERT(logical_store);
+
+        std::vector<G4LogicalVolume *> fiber_volumes;
+        CELER_LOG(status)
+            << "Attaching fiber sensitive detector to logical volumes using "
+               "material 'tpb_on_fibers'";
+        for (auto *logical_volume : *logical_store)
+        {
+            CELER_ASSERT(logical_volume);
+
+            auto const *material = logical_volume->GetMaterial();
+            if (!material || material->GetName() != "tpb_on_fibers")
+            {
+                continue;
+            }
+
+            CELER_LOG(status)
+                << "Fiber SD match: logical volume='"
+                << logical_volume->GetName() << "', material='"
+                << material->GetName() << "'";
+            fiber_volumes.push_back(logical_volume);
+        }
+
+        CELER_VALIDATE(!fiber_volumes.empty(),
+                       << "no logical volumes use material 'tpb_on_fibers'");
+
+        auto *fiber_detector = new detail::FiberSensitiveDetector;
+        detector_manager->AddNewDetector(fiber_detector);
+
+        for (auto *logical_volume : fiber_volumes)
+        {
+            CELER_VALIDATE(!logical_volume->GetSensitiveDetector(),
+                           << "logical volume '" << logical_volume->GetName()
+                           << "' already has a sensitive detector");
+            this->SetSensitiveDetector(logical_volume, fiber_detector);
         }
     }
 

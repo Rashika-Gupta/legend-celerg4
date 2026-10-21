@@ -27,7 +27,7 @@ class DetectorConstruction final : public G4VUserDetectorConstruction
     //! Return the world volume from the imported GDML geometry.
     G4VPhysicalVolume* Construct() final;
 
-    //! Attach one optical sensitive detector to all configured SiPMs.
+    //! Attach optical detectors to configured SiPMs and the outer fiber coating.
     void ConstructSDandField() final;
 
   private:
