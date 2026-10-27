@@ -13,7 +13,6 @@
 #include "G4ios.hh"
 
 // Celeritas
-#include "accel/UserActionIntegration.hh"
 #include "corecel/Assert.hh"
 
 // Local
@@ -23,16 +22,7 @@ namespace legend
 {
 //---------------------------------------------------------------------------//
 /*!
- * Construct the event action for an offload mode.
- */
-EventAction::EventAction(IntegrationType integration)
-    : integration_(integration)
-{
-}
-
-//---------------------------------------------------------------------------//
-/*!
- * Reset event output and initialize distribution offloading.
+ * Reset event output.
  */
 void EventAction::BeginOfEventAction(G4Event const* event)
 {
@@ -40,26 +30,20 @@ void EventAction::BeginOfEventAction(G4Event const* event)
 
     event_output().reset();
 
-    if (uses_user_action_integration(integration_))
-    {
-        celeritas::UserActionIntegration::Instance().BeginOfEventAction(event);
-    }
-
     start_time_ = std::chrono::high_resolution_clock::now();
     G4cout << "Begin event " << event->GetEventID() << G4endl;
 }
 
 //---------------------------------------------------------------------------//
 /*!
- * Flush transport and write all hit collections for the event.
+ * Write all hits for the event.
+ *
+ * The tracking manager flushes Celeritas before this is called, so both
+ * Geant4 and Celeritas hits are already buffered.
  */
 void EventAction::EndOfEventAction(G4Event const* event)
 {
     CELER_EXPECT(event);
-    if (uses_user_action_integration(integration_))
-    {
-        celeritas::UserActionIntegration::Instance().EndOfEventAction(event);
-    }
 
     auto const duration
         = std::chrono::high_resolution_clock::now() - start_time_;

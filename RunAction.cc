@@ -10,7 +10,6 @@
 
 #include "EventOutput.hh"
 
-#include <cstddef>
 #include <string>
 
 // Geant4
@@ -20,13 +19,7 @@
 #include "G4ios.hh"
 
 // Celeritas
-#include "accel/LocalTransporter.hh"
 #include "accel/TrackingManagerIntegration.hh"
-#include "accel/UserActionIntegration.hh"
-#include "accel/detail/IntegrationSingleton.hh"
-#include "celeritas/global/CoreState.hh"
-#include "celeritas/optical/CoreState.hh"
-#include "celeritas/optical/OpticalCollector.hh"
 #include "corecel/Assert.hh"
 #include "corecel/sys/Environment.hh"
 
@@ -34,11 +27,10 @@ namespace legend
 {
 //---------------------------------------------------------------------------//
 /*!
- * Construct the run action for an offload mode.
+ * Construct the run action and its output-file command.
  */
-RunAction::RunAction(OpticalOffloadMode mode, IntegrationType integration)
-    : mode_(mode)
-    , integration_(integration)
+RunAction::RunAction(SensitiveDetectorType detector_type)
+    : detector_type_(detector_type)
     , messenger_(std::make_unique<G4GenericMessenger>(
           this, "/legend/output/", "LEGEND analysis output"))
 {
@@ -53,7 +45,7 @@ void RunAction::BeginOfRunAction(G4Run const* run)
 {
     CELER_EXPECT(run);
 
-    this->begin_integration(run);
+    celeritas::TrackingManagerIntegration::Instance().BeginOfRunAction(run);
 
     auto* analysis_manager = G4AnalysisManager::Instance();
     CELER_ASSERT(analysis_manager);
@@ -63,14 +55,19 @@ void RunAction::BeginOfRunAction(G4Run const* run)
 
     std::string const transport
         = celeritas::getenv("CELER_DISABLE") == "1" ? "geant4" : "celeritas";
+    std::string const detector = to_cstring(detector_type_);
     std::string const output_file
-        = transport + "-" + to_cstring(mode_) + "-" + file_name_;
+        = transport + "-" + detector + "-" + file_name_;
 
     CELER_VALIDATE(analysis_manager->OpenFile(output_file),
                    << "failed to open analysis output '" << output_file << "'");
 
     G4cout << "Generating " << output_file << G4endl;
     EventOutput::create_ntuples(*analysis_manager);
+    if (G4Threading::IsMasterThread())
+    {
+        EventOutput::write_run_info(*analysis_manager, detector, transport);
+    }
 
     start_time_ = std::chrono::high_resolution_clock::now();
     run_time_ = 0;
@@ -79,7 +76,7 @@ void RunAction::BeginOfRunAction(G4Run const* run)
 
 //---------------------------------------------------------------------------//
 /*!
- * Write output, report optical generation, and finalize Celeritas.
+ * Write output and finalize Celeritas.
  */
 void RunAction::EndOfRunAction(G4Run const* run)
 {
@@ -94,8 +91,6 @@ void RunAction::EndOfRunAction(G4Run const* run)
         G4cout << "Run time: " << run_time_ << " seconds" << G4endl;
     }
 
-    this->report_optical_generation();
-
     auto* analysis_manager = G4AnalysisManager::Instance();
     CELER_ASSERT(analysis_manager);
 
@@ -107,72 +102,7 @@ void RunAction::EndOfRunAction(G4Run const* run)
     analysis_manager->Write();
     analysis_manager->CloseFile();
 
-    this->end_integration(run);
-}
-
-//---------------------------------------------------------------------------//
-
-void RunAction::begin_integration(G4Run const* run)
-{
-    CELER_EXPECT(run);
-    if (uses_user_action_integration(integration_))
-    {
-        celeritas::UserActionIntegration::Instance().BeginOfRunAction(run);
-    }
-    else
-    {
-        celeritas::TrackingManagerIntegration::Instance().BeginOfRunAction(run);
-    }
-}
-
-//---------------------------------------------------------------------------//
-
-void RunAction::end_integration(G4Run const* run)
-{
-    CELER_EXPECT(run);
-    if (uses_user_action_integration(integration_))
-    {
-        celeritas::UserActionIntegration::Instance().EndOfRunAction(run);
-    }
-    else
-    {
-        celeritas::TrackingManagerIntegration::Instance().EndOfRunAction(run);
-    }
-}
-
-//---------------------------------------------------------------------------//
-
-void RunAction::report_optical_generation() const
-{
-    using CeleritasMode = celeritas::OffloadMode;
-    auto& tracking = celeritas::TrackingManagerIntegration::Instance();
-    if (mode_ != OpticalOffloadMode::electron_photon
-        || tracking.GetMode() != CeleritasMode::enabled
-        || (!G4Threading::IsWorkerThread()
-            && G4Threading::IsMultithreadedApplication()))
-    {
-        return;
-    }
-
-    auto& integration = celeritas::detail::IntegrationSingleton::instance();
-    auto& local = dynamic_cast<celeritas::LocalTransporter&>(
-        integration.local_offload());
-    auto const& optical_collector
-        = integration.shared_params().problem_loaded().optical_collector;
-    if (!optical_collector)
-    {
-        return;
-    }
-
-    auto const counters
-        = optical_collector->exchange_counters(local.GetState().aux());
-    std::size_t total_photons_generated = 0;
-    for (auto const& generator : counters.generators)
-    {
-        total_photons_generated += generator.num_generated;
-    }
-    G4cout << "Celeritas generated " << total_photons_generated
-           << " optical photons" << G4endl;
+    celeritas::TrackingManagerIntegration::Instance().EndOfRunAction(run);
 }
 
 //---------------------------------------------------------------------------//

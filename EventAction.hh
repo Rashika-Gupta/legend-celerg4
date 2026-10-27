@@ -11,9 +11,6 @@
 // Geant4
 #include "G4UserEventAction.hh"
 
-// Local
-#include "OpticalOffloadMode.hh"
-
 namespace legend
 {
 //---------------------------------------------------------------------------//
@@ -23,9 +20,6 @@ namespace legend
 class EventAction final : public G4UserEventAction
 {
   public:
-    //! Construct for the selected Celeritas offload mode.
-    explicit EventAction(IntegrationType integration);
-
     //! Reset analysis state and initialize Celeritas for an event.
     void BeginOfEventAction(G4Event const* event) final;
 
@@ -34,7 +28,6 @@ class EventAction final : public G4UserEventAction
 
   private:
     std::chrono::time_point<std::chrono::high_resolution_clock> start_time_;
-    IntegrationType integration_;
 };
 
 //---------------------------------------------------------------------------//

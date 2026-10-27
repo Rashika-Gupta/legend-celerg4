@@ -13,14 +13,11 @@
 #include "accel/SetupOptions.hh"
 #include "corecel/Types.hh"
 
-// Local
-#include "OpticalOffloadMode.hh"
-
 namespace legend
 {
 //---------------------------------------------------------------------------//
 /*!
- * Construct Celeritas setup options for one optical-offload mode.
+ * Construct Celeritas setup options for Geant4 optical-photon track offload.
  */
 class CeleritasSetup
 {
@@ -28,7 +25,6 @@ class CeleritasSetup
     //! Configuration required to build Celeritas setup options.
     struct Input
     {
-        OpticalOffloadMode mode;
         celeritas::size_type num_track_slots{65536};
         std::string diagnostics_file{"celeritas.out.json"};
     };

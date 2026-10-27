@@ -8,11 +8,11 @@
 
 #include "CeleritasSetup.hh"
 
+#include <array>
 #include <utility>
 #include <vector>
 
 // Geant4
-#include "G4Electron.hh"
 #include "G4Event.hh"
 #include "G4EventManager.hh"
 #include "G4LogicalVolume.hh"
@@ -32,42 +32,12 @@
 // Local
 #include "EventOutput.hh"
 #include "FiberSensitiveDetector.hh"
+#include "SipmSensitiveDetector.hh"
 
 namespace legend
 {
     namespace
     {
-        //---------------------------------------------------------------------------//
-        /*!
-         * Particles and optical generator associated with an offload mode.
-         */
-        struct OffloadConfiguration
-        {
-            celeritas::SetupOptions::VecG4PD particles;
-            celeritas::inp::OpticalGenerator generator;
-        };
-
-        //---------------------------------------------------------------------------//
-        //! Select particles and the optical generator for an offload mode.
-        OffloadConfiguration make_offload_configuration(OpticalOffloadMode mode)
-        {
-            switch (mode)
-            {
-            case OpticalOffloadMode::optical_gun:
-            case OpticalOffloadMode::optical_track:
-                return {{G4OpticalPhoton::Definition()},
-                        celeritas::inp::OpticalDirectGenerator{}};
-
-            case OpticalOffloadMode::optical_distribution:
-                return {{}, celeritas::inp::OpticalOffloadGenerator{}};
-
-            case OpticalOffloadMode::electron_photon:
-                return {{G4Electron::Definition()},
-                        celeritas::inp::OpticalEmGenerator{}};
-            }
-            CELER_ASSERT_UNREACHABLE();
-        }
-
         //---------------------------------------------------------------------------//
         //! Buffer Celeritas optical hits for event-level analysis output.
         void record_optical_hits(
@@ -100,29 +70,43 @@ namespace legend
 
                 auto const *logical = physical->GetLogicalVolume();
                 CELER_ASSERT(logical);
-                if (logical->GetName() == detail::FiberSensitiveDetector::logical_volume_name())
+                auto const *sd = logical->GetSensitiveDetector();
+                std::array<double, 3> const position{
+                    hit.position[0], hit.position[1], hit.position[2]};
+                G4int const instance_id = static_cast<G4int>(
+                    hit.volume_instance.unchecked_get());
+
+                if (dynamic_cast<detail::FiberSensitiveDetector const *>(sd))
                 {
-                    fiber_records.push_back(
-                        {event->GetEventID(),
-                         static_cast<G4int>(hit.volume_instance.unchecked_get()),
-                         physical->GetName(),
-                         {hit.position[0], hit.position[1], hit.position[2]},
-                         hit.time,
-                         energy_mev});
+                    fiber_records.push_back({event->GetEventID(),
+                                             instance_id,
+                                             physical->GetName(),
+                                             position,
+                                             hit.time,
+                                             energy_mev});
                     continue;
                 }
 
+                auto const *sipm = dynamic_cast<detail::SipmSensitiveDetector const *>(sd);
+                CELER_VALIDATE(sipm,
+                               << "optical hit in volume '" << physical->GetName()
+                               << "' has no LEGEND sensitive detector");
+
+                // Store the GDML channel rather than the Celeritas detector
+                // index so Geant4 and Celeritas output are comparable
+                G4int const channel = sipm->detector_id(physical->GetName());
+                CELER_VALIDATE(channel >= 0,
+                               << "no GDML channel for SiPM volume '"
+                               << physical->GetName() << "'");
+
                 records.push_back({event->GetEventID(),
-                                   static_cast<G4int>(
-                                       hit.detector.unchecked_get()),
-                                   static_cast<G4int>(
-                                       hit.primary.unchecked_get()),
-                                   static_cast<G4int>(
-                                       hit.volume_instance.unchecked_get()),
+                                   channel,
+                                   hit.primary ? static_cast<G4int>(
+                                                     hit.primary.unchecked_get())
+                                               : -1,
+                                   instance_id,
                                    physical->GetName(),
-                                   {hit.position[0],
-                                    hit.position[1],
-                                    hit.position[2]},
+                                   position,
                                    hit.time,
                                    energy_mev});
             }
@@ -163,9 +147,9 @@ namespace legend
         optical.capacity.generators = 2 * input_.num_track_slots;
         optical.detectors.callback = record_optical_hits;
 
-        auto config = make_offload_configuration(input_.mode);
-        result.offload_particles = std::move(config.particles);
-        optical.generator = std::move(config.generator);
+        // Geant4 creates optical photons; Celeritas transports their tracks
+        result.offload_particles = {G4OpticalPhoton::Definition()};
+        optical.generator = celeritas::inp::OpticalDirectGenerator{};
         result.optical = std::move(optical);
         return result;
     }

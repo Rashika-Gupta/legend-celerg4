@@ -7,8 +7,6 @@
 //---------------------------------------------------------------------------//
 #include "PhysicsList.hh"
 
-#include <memory>
-
 // Geant4
 #include "G4Electron.hh"
 #include "G4OpticalParameters.hh"
@@ -20,36 +18,24 @@
 #include "G4ios.hh"
 
 // Celeritas
-#include "accel/SharedParams.hh"
-#include "accel/gen/CherenkovOffload.hh"
-#include "accel/gen/ScintillationOffload.hh"
-#include "celeritas/g4/SupportedOpticalPhysics.hh"
 #include "corecel/Assert.hh"
 
 namespace legend
 {
     //---------------------------------------------------------------------------//
 
-    PhysicsList::PhysicsList(OpticalOffloadMode mode) : FTFP_BERT_HP()
+    PhysicsList::PhysicsList() : FTFP_BERT_HP()
     {
-        if (mode == OpticalOffloadMode::optical_distribution && celeritas::SharedParams::GetMode() == celeritas::OffloadMode::enabled)
-        {
-            RegisterPhysics(
-                new celeritas::SupportedOpticalPhysics(physics_options()));
-        }
-        else
-        {
-            auto *params = G4OpticalParameters::Instance();
-            params->SetProcessActivation("Cerenkov", false);
-            params->SetProcessActivation("Scintillation", true);
-            params->SetProcessActivation("OpAbsorption", true);
-            params->SetProcessActivation("OpRayleigh", false);
-            params->SetProcessActivation("OpBoundary", true);
-            params->SetBoundaryInvokeSD(true);
-            params->SetProcessActivation("OpWLS", false);
-            params->SetProcessActivation("OpMieHG", false);
-            RegisterPhysics(new G4OpticalPhysics());
-        }
+        auto *params = G4OpticalParameters::Instance();
+        params->SetProcessActivation("Cerenkov", false);
+        params->SetProcessActivation("Scintillation", true);
+        params->SetProcessActivation("OpAbsorption", true);
+        params->SetProcessActivation("OpRayleigh", false);
+        params->SetProcessActivation("OpBoundary", true);
+        params->SetBoundaryInvokeSD(true);
+        params->SetProcessActivation("OpWLS", false);
+        params->SetProcessActivation("OpMieHG", false);
+        RegisterPhysics(new G4OpticalPhysics());
     }
 
     //---------------------------------------------------------------------------//
@@ -98,39 +84,6 @@ namespace legend
                 optical_process_manager->RemoveProcess(process);
             }
         }
-    }
-
-    //---------------------------------------------------------------------------//
-
-    celeritas::GeantOpticalPhysicsOptions PhysicsList::optical_options() const
-    {
-        celeritas::GeantOpticalPhysicsOptions optical;
-
-        optical.cherenkov.emplace();
-        optical.cherenkov->custom_cherenkov = []
-        { return std::make_unique<celeritas::CherenkovOffload>(); };
-        // Generated photons are transported directly by Celeritas.
-        optical.cherenkov->stack_photons = false;
-
-        optical.scintillation.emplace();
-        optical.scintillation->custom_scintillation = []
-        { return std::make_unique<celeritas::ScintillationOffload>(); };
-        optical.scintillation->stack_photons = false;
-
-        optical.boundary->invoke_sd = true;
-        optical.absorption = true;
-        optical.rayleigh_scattering = false;
-
-        return optical;
-    }
-
-    //---------------------------------------------------------------------------//
-
-    celeritas::GeantPhysicsOptions PhysicsList::physics_options() const
-    {
-        celeritas::GeantPhysicsOptions opts;
-        opts.optical = this->optical_options();
-        return opts;
     }
 
     //---------------------------------------------------------------------------//
