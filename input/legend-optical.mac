@@ -1,13 +1,18 @@
 # Batch execution for the LEGEND optical integration
-/tracking/verbose 0
+#/tracking/verbose 1
 /control/verbose 0
 /run/verbose 0
-
+#/process/optical/verbose 2
 # Geant4 analysis supports CSV, ROOT, and HDF5 output extensions.
 /legend/output/file legend.root
 
-# Fixed source point for this standalone geometry example.
-/gps/pos/type Point
-/gps/pos/centre -16.30 50.17 349.11 mm
+# Fixed-energy isotropic optical photons (128 nm LAr scintillation)
+/legend/gun/photons 10
+/legend/gun/energy 9.69 eV
 
-/run/beamOn 1
+# Source point: default depends on LEGEND_SENSDET (sipm or fiber).
+# Add points to override it; event i uses point (i mod N).
+#/legend/gun/addPosition 52.75 0 349.12 mm
+#/legend/gun/addPosition 30 0 -325 mm
+
+/run/beamOn 10
