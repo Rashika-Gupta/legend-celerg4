@@ -40,7 +40,7 @@ set(legend_celer_sources
   DetectorConstruction.cc
   EventAction.cc
   EventOutput.cc
-  OpticalOffloadMode.cc
+  FiberSensitiveDetector.cc
   PhysicsList.cc
   PrimaryGeneratorAction.cc
   RunAction.cc
@@ -55,20 +55,7 @@ add_executable(legend_celer legend_celer.cc ${legend_celer_sources})
 target_include_directories(legend_celer PRIVATE ${PROJECT_SOURCE_DIR})
 
 #----------------------------------------------------------------------------
-# Set Celeritas offload mode
-set(LEGEND_CELER_OFFLOAD_MODE "optical-track" CACHE STRING
-    "Default Celeritas offload mode")
-
-set_property(CACHE LEGEND_CELER_OFFLOAD_MODE PROPERTY STRINGS
-    optical-track
-    optical-distribution
-    electron-photon
-    optical-gun)
-
-#----------------------------------------------------------------------------
 # Link Celeritas libraries
-target_compile_definitions(legend_celer PRIVATE
-    LEGEND_DEFAULT_OFFLOAD_MODE="${LEGEND_CELER_OFFLOAD_MODE}")
 if(LEGEND_USE_GEANT4_VIS)
   target_compile_definitions(legend_celer PRIVATE LEGEND_USE_GEANT4_VIS=1)
 endif()
