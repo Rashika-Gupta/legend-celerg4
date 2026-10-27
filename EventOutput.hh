@@ -59,6 +59,11 @@ class EventOutput
     //! Create all analysis ntuples in their stable output order.
     static void create_ntuples(G4AnalysisManager& manager);
 
+    //! Write the run configuration (one row of \c run_info).
+    static void write_run_info(G4AnalysisManager& manager,
+                               std::string const& sensitive_detector,
+                               std::string const& transport);
+
     //! Clear all state at the beginning of an event.
     void reset();
 

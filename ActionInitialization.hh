@@ -31,21 +31,21 @@
 // Geant4
 #include "G4VUserActionInitialization.hh"
 
-// Local
-#include "OpticalOffloadMode.hh"
+#include "DetectorConstruction.hh"
 
 namespace legend
 {
 //---------------------------------------------------------------------------//
 /*!
- * Install Geant4 user actions for a Celeritas optical-offload mode.
+ * Install Geant4 user actions for Celeritas optical-photon offload.
  */
 class ActionInitialization final : public G4VUserActionInitialization
 {
   public:
-    //! Construct for the selected Celeritas optical-offload mode.
-    ActionInitialization(OpticalOffloadMode mode,
-                         IntegrationType integration);
+    explicit ActionInitialization(SensitiveDetectorType detector_type)
+        : detector_type_(detector_type)
+    {
+    }
 
     //! Install actions used by the master thread.
     void BuildForMaster() const final;
@@ -54,8 +54,7 @@ class ActionInitialization final : public G4VUserActionInitialization
     void Build() const final;
 
   private:
-    OpticalOffloadMode mode_;
-    IntegrationType integration_;
+    SensitiveDetectorType detector_type_;
 };
 
 //---------------------------------------------------------------------------//

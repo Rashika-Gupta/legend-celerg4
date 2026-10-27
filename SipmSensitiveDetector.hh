@@ -41,6 +41,9 @@ class SipmSensitiveDetector final : public G4VSensitiveDetector
      */
     G4bool ProcessHits(G4Step* step, G4TouchableHistory*) final;
 
+    //! LEGEND channel for a SiPM physical volume, or -1 if not a SiPM.
+    G4int detector_id(std::string const& volume_name) const;
+
   private:
     DetectorIdMap detector_ids_;
 };

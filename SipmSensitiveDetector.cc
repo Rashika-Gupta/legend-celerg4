@@ -69,8 +69,8 @@ G4bool SipmSensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*)
         return false;
     }
 
-    auto const detector_iter = detector_ids_.find(physical_volume->GetName());
-    if (detector_iter == detector_ids_.end())
+    G4int const channel = this->detector_id(physical_volume->GetName());
+    if (channel < 0)
     {
         return false;
     }
@@ -82,7 +82,7 @@ G4bool SipmSensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*)
 
     auto const& position = post_step->GetPosition();
     event_output().add_hit({event->GetEventID(),
-                            detector_iter->second,
+                            channel,
                             track->GetTrackID(),
                             physical_volume->GetInstanceID(),
                             physical_volume->GetName(),
@@ -91,7 +91,20 @@ G4bool SipmSensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*)
                              position.z() / cm},
                             post_step->GetGlobalTime() / second,
                             post_step->GetKineticEnergy() / MeV});
+
+    // Absorb the photon, matching Celeritas optical detectors
+    step->GetTrack()->SetTrackStatus(fStopAndKill);
     return true;
+}
+
+//---------------------------------------------------------------------------//
+/*!
+ * Look up the GDML channel for a SiPM physical volume.
+ */
+G4int SipmSensitiveDetector::detector_id(std::string const& volume_name) const
+{
+    auto const iter = detector_ids_.find(volume_name);
+    return iter != detector_ids_.end() ? iter->second : -1;
 }
 
 //---------------------------------------------------------------------------//

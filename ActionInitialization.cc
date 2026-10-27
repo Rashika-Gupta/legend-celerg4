@@ -17,27 +17,18 @@ namespace legend
 {
 //---------------------------------------------------------------------------//
 
-ActionInitialization::ActionInitialization(OpticalOffloadMode mode,
-                                           IntegrationType integration)
-    : mode_(mode)
-    , integration_(integration)
-{
-}
-
-//---------------------------------------------------------------------------//
-
 void ActionInitialization::BuildForMaster() const
 {
-    SetUserAction(new RunAction(mode_, integration_));
+    SetUserAction(new RunAction(detector_type_));
 }
 
 //---------------------------------------------------------------------------//
 
 void ActionInitialization::Build() const
 {
-    SetUserAction(new PrimaryGeneratorAction(mode_));
-    SetUserAction(new RunAction(mode_, integration_));
-    SetUserAction(new EventAction(integration_));
+    SetUserAction(new PrimaryGeneratorAction(detector_type_));
+    SetUserAction(new RunAction(detector_type_));
+    SetUserAction(new EventAction);
     SetUserAction(new TrackingAction());
 }
 

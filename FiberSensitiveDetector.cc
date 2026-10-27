@@ -96,6 +96,9 @@ G4bool FiberSensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*)
                                    position.z() / cm},
                                   pre_step->GetGlobalTime() / second,
                                   pre_step->GetKineticEnergy() / MeV});
+
+    // Absorb the photon, matching Celeritas optical detectors
+    step->GetTrack()->SetTrackStatus(fStopAndKill);
     return true;
 }
 

@@ -1,69 +1,62 @@
-//
-// ********************************************************************
-// * License and Disclaimer                                           *
-// *                                                                  *
-// * The  Geant4 software  is  copyright of the Copyright Holders  of *
-// * the Geant4 Collaboration.  It is provided  under  the terms  and *
-// * conditions of the Geant4 Software License,  included in the file *
-// * LICENSE and available at  http://cern.ch/geant4/license .  These *
-// * include a list of copyright holders.                             *
-// *                                                                  *
-// * Neither the authors of this software system, nor their employing *
-// * institutes,nor the agencies providing financial support for this *
-// * work  make  any representation or  warranty, express or implied, *
-// * regarding  this  software system or assume any liability for its *
-// * use.  Please see the license in the file  LICENSE  and URL above *
-// * for the full disclaimer and the limitation of liability.         *
-// *                                                                  *
-// * This  code  implementation is the result of  the  scientific and *
-// * technical work of the GEANT4 collaboration.                      *
-// * By using,  copying,  modifying or  distributing the software (or *
-// * any work based  on the software)  you  agree  to acknowledge its *
-// * use  in  resulting  scientific  publications,  and indicate your *
-// * acceptance of all terms of the Geant4 Software license.          *
-// ********************************************************************
+//------------------------------- -*- C++ -*- -------------------------------//
+// Copyright Celeritas contributors: see top-level COPYRIGHT file for details
+// SPDX-License-Identifier: (Apache-2.0 OR MIT)
 //---------------------------------------------------------------------------//
 //! \file PrimaryGeneratorAction.hh
-//! \brief Definition of the LEGEND primary generator action
+//! \brief Definition of the LEGEND optical-photon gun
 //---------------------------------------------------------------------------//
 #pragma once
 
 #include <memory>
+#include <vector>
 
 // Geant4
+#include "G4GenericMessenger.hh"
+#include "G4SystemOfUnits.hh"
+#include "G4ThreeVector.hh"
+#include "G4UImessenger.hh"
 #include "G4VUserPrimaryGeneratorAction.hh"
 
-// Local
-#include "OpticalOffloadMode.hh"
+#include "DetectorConstruction.hh"
 
 class G4Event;
-class G4GeneralParticleSource;
 
 namespace legend
 {
 //---------------------------------------------------------------------------//
 /*!
- * Generate optical or charged primaries for the selected offload mode.
+ * Fire fixed-energy isotropic optical photons from a list of source points.
+ *
+ * Event \em i uses source position <em>i mod N</em>, so a run of
+ * <em>k N</em> events visits every position \em k times. Positions are added
+ * with \c /legend/gun/addPosition; with none, \c /legend/gun/position is used.
+ * Its default depends on the sensitive detector: inside the shroud at the
+ * fiber middle for fibers, or just below top SiPM S0102T for SiPMs.
  */
 class PrimaryGeneratorAction final : public G4VUserPrimaryGeneratorAction
 {
   public:
-    //! Construct for a selected optical-offload mode.
-    explicit PrimaryGeneratorAction(OpticalOffloadMode mode);
-    ~PrimaryGeneratorAction();
+    explicit PrimaryGeneratorAction(SensitiveDetectorType detector_type);
 
-    //! Generate primary vertices for one Geant4 event.
+    //! Generate the optical photons for one Geant4 event.
     void GeneratePrimaries(G4Event* event) final;
 
+    //! Append a source point (messenger command).
+    void add_position(G4ThreeVector position);
+
+    //! Remove all added source points (messenger command).
+    void clear_positions();
+
   private:
-    //! Generate one event containing directly transported optical photons.
-    void generate_optical_photons(G4Event& event);
+    //! Source point used by an event.
+    G4ThreeVector const& position(G4int event_id) const;
 
-    //! Generate one electron for optical production or electron offloading.
-    void generate_electron(G4Event& event);
-
-    std::unique_ptr<G4GeneralParticleSource> particle_source_;
-    OpticalOffloadMode mode_;
+    G4int num_photons_{1000};
+    G4double energy_{9.69 * eV};  // 128 nm LAr scintillation
+    G4ThreeVector default_position_;
+    std::vector<G4ThreeVector> positions_;
+    std::unique_ptr<G4GenericMessenger> messenger_;
+    std::unique_ptr<G4UImessenger> add_position_messenger_;
 };
 
 //---------------------------------------------------------------------------//

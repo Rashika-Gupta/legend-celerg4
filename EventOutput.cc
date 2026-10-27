@@ -29,7 +29,8 @@ namespace legend
         {
             optical_hits,
             event_summary,
-            fiber_hits
+            fiber_hits,
+            run_info
         };
 
         enum class HitColumn : G4int
@@ -58,6 +59,12 @@ namespace legend
             time_s,
             energy_mev,
             wavelength_nm
+        };
+
+        enum class RunInfoColumn : G4int
+        {
+            sensitive_detector,
+            transport
         };
 
         enum class SummaryColumn : G4int
@@ -121,6 +128,25 @@ namespace legend
         manager.CreateNtupleDColumn("energy_mev");
         manager.CreateNtupleDColumn("wavelength_nm");
         manager.FinishNtuple();
+
+        manager.CreateNtuple("run_info", "LEGEND run configuration");
+        manager.CreateNtupleSColumn("sensitive_detector");
+        manager.CreateNtupleSColumn("transport");
+        manager.FinishNtuple();
+    }
+
+    //---------------------------------------------------------------------------//
+
+    void EventOutput::write_run_info(G4AnalysisManager &manager,
+                                     std::string const &sensitive_detector,
+                                     std::string const &transport)
+    {
+        G4int const ntuple = to_int(NtupleId::run_info);
+        manager.FillNtupleSColumn(
+            ntuple, to_int(RunInfoColumn::sensitive_detector), sensitive_detector);
+        manager.FillNtupleSColumn(
+            ntuple, to_int(RunInfoColumn::transport), transport);
+        manager.AddNtupleRow(ntuple);
     }
 
     //---------------------------------------------------------------------------//

@@ -27,18 +27,48 @@
 #include "corecel/io/Logger.hh"
 
 // Local
-#include "DiagnosticOpticalSensitiveDetector.hh"
 #include "FiberSensitiveDetector.hh"
 #include "SipmSensitiveDetector.hh"
 
 namespace legend
 {
     //---------------------------------------------------------------------------//
+    SensitiveDetectorType parse_sensitive_detector(std::string_view value)
+    {
+        if (value == "sipm")
+        {
+            return SensitiveDetectorType::sipm;
+        }
+        if (value == "fiber")
+        {
+            return SensitiveDetectorType::fiber;
+        }
+        CELER_VALIDATE(false,
+                       << "invalid LEGEND sensitive detector '" << value
+                       << "': expected 'sipm' or 'fiber'");
+        CELER_ASSERT_UNREACHABLE();
+    }
+
+    //---------------------------------------------------------------------------//
+    char const *to_cstring(SensitiveDetectorType value)
+    {
+        switch (value)
+        {
+        case SensitiveDetectorType::sipm:
+            return "sipm";
+        case SensitiveDetectorType::fiber:
+            return "fiber";
+        }
+        CELER_ASSERT_UNREACHABLE();
+    }
+
+    //---------------------------------------------------------------------------//
     /*!
      * Construct from a parser containing a loaded GDML geometry.
      */
-    DetectorConstruction::DetectorConstruction(G4GDMLParser const *parser)
-        : parser_(parser)
+    DetectorConstruction::DetectorConstruction(
+        G4GDMLParser const *parser, SensitiveDetectorType detector_type)
+        : parser_(parser), detector_type_(detector_type)
     {
         CELER_EXPECT(parser_);
     }
@@ -57,9 +87,33 @@ namespace legend
     //---------------------------------------------------------------------------//
 
     /*!
-     * Attach the LEGEND SiPM detector and outer fiber-coating monitor.
+     * Attach the selected LEGEND optical detector.
+     *
+     * Celeritas converts every logical volume with a sensitive detector into
+     * an optical detector that absorbs photons on entry, so only attach SDs
+     * to volumes that should stop photons.
      */
     void DetectorConstruction::ConstructSDandField()
+    {
+        switch (detector_type_)
+        {
+        case SensitiveDetectorType::sipm:
+            CELER_LOG(status) << "Sensitive detector: SiPMs";
+            this->attach_sipms();
+            return;
+        case SensitiveDetectorType::fiber:
+            CELER_LOG(status) << "Sensitive detector: fibers";
+            this->attach_fibers();
+            return;
+        }
+        CELER_ASSERT_UNREACHABLE();
+    }
+
+    //---------------------------------------------------------------------------//
+    /*!
+     * Attach the SiPM detector to the GDML optical-detector channels.
+     */
+    void DetectorConstruction::attach_sipms()
     {
         using DetectorIdMap = detail::SipmSensitiveDetector::DetectorIdMap;
 
@@ -129,34 +183,16 @@ namespace legend
             CELER_ASSERT(logical_volume);
             this->SetSensitiveDetector(logical_volume, sipm_detector);
         }
+    }
 
-        auto *source_volume = physical_store->GetVolume(
-            "liquid_argon_underground", false);
-        CELER_VALIDATE(source_volume,
-                       << "physical volume 'liquid_argon_underground' was not "
-                          "found");
-
-        auto *source_logical = source_volume->GetLogicalVolume();
-        CELER_ASSERT(source_logical);
-        CELER_VALIDATE(!source_logical->GetSensitiveDetector(),
-                       << "source logical volume '"
-                       << source_logical->GetName()
-                       << "' already has a sensitive detector");
-
-        auto *diagnostic_detector
-            = new detail::DiagnosticOpticalSensitiveDetector;
-        detector_manager->AddNewDetector(diagnostic_detector);
-        this->SetSensitiveDetector(source_logical, diagnostic_detector);
-        CELER_ENSURE(source_logical->GetSensitiveDetector()
-                     == diagnostic_detector);
-
-        auto const *source_material = source_logical->GetMaterial();
-        CELER_ASSERT(source_material);
-        CELER_LOG(status)
-            << "Attached optical diagnostic SD to physical volume '"
-            << source_volume->GetName() << "', logical volume '"
-            << source_logical->GetName() << "', material '"
-            << source_material->GetName() << "'";
+    //---------------------------------------------------------------------------//
+    /*!
+     * Attach the fiber detector to volumes made of the fiber TPB coating.
+     */
+    void DetectorConstruction::attach_fibers()
+    {
+        auto *detector_manager = G4SDManager::GetSDMpointer();
+        CELER_ASSERT(detector_manager);
 
         auto *logical_store = G4LogicalVolumeStore::GetInstance();
         CELER_ASSERT(logical_store);
