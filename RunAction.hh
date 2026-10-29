@@ -17,31 +17,33 @@
 
 // Local
 #include "DetectorConstruction.hh"
+#include "OpticalOffloadMode.hh"
 
 namespace legend
 {
-//---------------------------------------------------------------------------//
-/*!
- * Initialize Celeritas and analysis output for each Geant4 run.
- */
-class RunAction final : public G4UserRunAction
-{
+  //---------------------------------------------------------------------------//
+  /*!
+   * Initialize Celeritas and analysis output for each Geant4 run.
+   */
+  class RunAction final : public G4UserRunAction
+  {
   public:
-    explicit RunAction(SensitiveDetectorType detector_type);
+    RunAction(SensitiveDetectorType detector_type, OpticalOffloadMode offload_mode);
 
     //! Initialize Celeritas and open analysis output for a run.
-    void BeginOfRunAction(G4Run const* run) final;
+    void BeginOfRunAction(G4Run const *run) final;
 
     //! Write analysis output and finalize Celeritas for a run.
-    void EndOfRunAction(G4Run const* run) final;
+    void EndOfRunAction(G4Run const *run) final;
 
   private:
     SensitiveDetectorType detector_type_;
+    OpticalOffloadMode offload_mode_;
     std::chrono::time_point<std::chrono::high_resolution_clock> start_time_;
     double run_time_{0};
     G4String file_name_{"out.csv"};
     std::unique_ptr<G4GenericMessenger> messenger_;
-};
+  };
 
-//---------------------------------------------------------------------------//
+  //---------------------------------------------------------------------------//
 } // namespace legend

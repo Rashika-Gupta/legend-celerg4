@@ -15,22 +15,22 @@
 
 namespace legend
 {
-//---------------------------------------------------------------------------//
+    //---------------------------------------------------------------------------//
 
-void ActionInitialization::BuildForMaster() const
-{
-    SetUserAction(new RunAction(detector_type_));
-}
+    void ActionInitialization::BuildForMaster() const
+    {
+        SetUserAction(new RunAction(detector_type_, offload_mode_));
+    }
 
-//---------------------------------------------------------------------------//
+    //---------------------------------------------------------------------------//
 
-void ActionInitialization::Build() const
-{
-    SetUserAction(new PrimaryGeneratorAction(detector_type_));
-    SetUserAction(new RunAction(detector_type_));
-    SetUserAction(new EventAction);
-    SetUserAction(new TrackingAction());
-}
+    void ActionInitialization::Build() const
+    {
+        SetUserAction(new PrimaryGeneratorAction(detector_type_, offload_mode_));
+        SetUserAction(new RunAction(detector_type_, offload_mode_));
+        SetUserAction(new EventAction(offload_mode_));
+        SetUserAction(new TrackingAction());
+    }
 
-//---------------------------------------------------------------------------//
+    //---------------------------------------------------------------------------//
 } // namespace legend

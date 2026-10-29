@@ -15,6 +15,7 @@
 #include "G4RunManager.hh"
 #include "G4RunManagerFactory.hh"
 #include "G4String.hh"
+#include "G4Threading.hh"
 #include "G4UIExecutive.hh"
 #include "G4UImanager.hh"
 #if LEGEND_USE_GEANT4_VIS
@@ -29,8 +30,10 @@
 
 // Local
 #include "ActionInitialization.hh"
+#include "CelerOpticalGunRunner.hh"
 #include "CeleritasSetup.hh"
 #include "DetectorConstruction.hh"
+#include "OpticalOffloadMode.hh"
 #include "PhysicsList.hh"
 
 namespace
@@ -47,6 +50,15 @@ namespace
                << "Environment:" << G4endl
                << "  LEGEND_SENSDET=sipm|fiber  sensitive detector (default "
                   "sipm)"
+               << G4endl
+               << "  LEGEND_CELER_OFFLOAD_MODE=optical-track|optical-gun "
+                  "(default optical-track)"
+               << G4endl
+               << "  LEGEND_NUM_THREADS=<n>    worker threads (default: "
+                  "hardware concurrency)"
+               << G4endl
+               << "  LEGEND_NUM_TRACK_SLOTS=<n> Celeritas optical track "
+                  "capacity (default 65536)"
                << G4endl
                << "  CELER_DISABLE=1            transport photons in Geant4"
                << G4endl;
@@ -77,6 +89,16 @@ int main(int argc, char **argv)
     }
     auto const detector_type = legend::parse_sensitive_detector(detector_name);
 
+    auto const offload_mode = legend::parse_offload_mode(celeritas::getenv("LEGEND_CELER_OFFLOAD_MODE"));
+
+    legend::CeleritasSetup::Input setup_input;
+    std::string const slots_env = celeritas::getenv("LEGEND_NUM_TRACK_SLOTS");
+    if (!slots_env.empty())
+    {
+        setup_input.num_track_slots =
+            static_cast<celeritas::size_type>(std::stoul(slots_env));
+    }
+
     auto parser = std::make_unique<G4GDMLParser>();
     parser->Read(geometry_file, false);
 
@@ -87,21 +109,38 @@ int main(int argc, char **argv)
     }
 
     std::unique_ptr<G4RunManager> run_manager{
-        G4RunManagerFactory::CreateRunManager(G4RunManagerType::Serial)};
+        G4RunManagerFactory::CreateRunManager(G4RunManagerType::MT)};
+    // Default to hardware concurrency; override with LEGEND_NUM_THREADS for tuning
+    std::string const num_threads_env = celeritas::getenv("LEGEND_NUM_THREADS");
+    int const num_threads = num_threads_env.empty()
+                                ? static_cast<int>(G4Threading::G4GetNumberOfCores())
+                                : std::stoi(num_threads_env);
+    run_manager->SetNumberOfThreads(num_threads);
+
     auto *physics = new legend::PhysicsList;
 
-    // Geant4 optical-photon tracks are handed to Celeritas (CELER_DISABLE=1
-    // keeps them in Geant4)
-    auto &integration = celeritas::TrackingManagerIntegration::Instance();
-    physics->RegisterPhysics(
-        new celeritas::TrackingManagerConstructor(&integration));
-    integration.SetOptions(legend::CeleritasSetup({})());
+    if (offload_mode == legend::OpticalOffloadMode::optical_gun)
+    {
+        // Celeritas generates and transports the optical photons itself
+        legend::CelerOpticalGunRunner::Instance().SetOptionsFactory(
+            [setup_input]
+            { return legend::make_optical_gun_options(setup_input); });
+    }
+    else
+    {
+        // Geant4 optical-photon tracks are handed to Celeritas (CELER_DISABLE=1
+        // keeps them in Geant4)
+        auto &integration = celeritas::TrackingManagerIntegration::Instance();
+        physics->RegisterPhysics(
+            new celeritas::TrackingManagerConstructor(&integration));
+        integration.SetOptions(legend::CeleritasSetup({})(setup_input));
+    }
 
     run_manager->SetUserInitialization(physics);
     run_manager->SetUserInitialization(
         new legend::DetectorConstruction(parser.get(), detector_type));
     run_manager->SetUserInitialization(
-        new legend::ActionInitialization(detector_type));
+        new legend::ActionInitialization(detector_type, offload_mode));
     run_manager->Initialize();
 
 #if LEGEND_USE_GEANT4_VIS

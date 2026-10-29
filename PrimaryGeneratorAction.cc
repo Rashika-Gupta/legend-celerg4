@@ -22,11 +22,13 @@
 
 // Celeritas
 #include "corecel/Assert.hh"
+#include "corecel/sys/Environment.hh"
 
 namespace legend
 {
     namespace
     {
+        thread_local PrimaryGeneratorAction *g_instance = nullptr;
         //---------------------------------------------------------------------------//
         //! Sample an isotropic unit direction.
         G4ThreeVector sample_isotropic()
@@ -74,7 +76,7 @@ namespace legend
          */
         class AddPositionMessenger final : public G4UImessenger
         {
-          public:
+        public:
             explicit AddPositionMessenger(PrimaryGeneratorAction *gun)
                 : gun_(gun),
                   command_(std::make_unique<G4UIcmdWith3VectorAndUnit>(
@@ -92,7 +94,7 @@ namespace legend
                 gun_->add_position(command_->GetNew3VectorValue(value));
             }
 
-          private:
+        private:
             PrimaryGeneratorAction *gun_;
             std::unique_ptr<G4UIcmdWith3VectorAndUnit> command_;
         };
@@ -101,10 +103,12 @@ namespace legend
     //---------------------------------------------------------------------------//
 
     PrimaryGeneratorAction::PrimaryGeneratorAction(
-        SensitiveDetectorType detector_type)
-        : default_position_(default_position(detector_type)), messenger_(std::make_unique<G4GenericMessenger>(
-              this, "/legend/gun/", "LEGEND optical-photon gun"))
+        SensitiveDetectorType detector_type, OpticalOffloadMode offload_mode)
+        : offload_mode_(offload_mode), default_position_(default_position(detector_type)), messenger_(std::make_unique<G4GenericMessenger>(
+                                                                                               this, "/legend/gun/", "LEGEND optical-photon gun"))
     {
+        g_instance = this;
+
         messenger_->DeclareProperty(
             "photons", num_photons_, "Optical photons generated per event");
         messenger_->DeclarePropertyWithUnit(
@@ -137,6 +141,13 @@ namespace legend
     void PrimaryGeneratorAction::GeneratePrimaries(G4Event *event)
     {
         CELER_EXPECT(event);
+
+        if (offload_mode_ == OpticalOffloadMode::optical_gun && celeritas::getenv("CELER_DISABLE") != "1")
+        {
+            // Celeritas generates and transports the optical photons itself
+            return;
+        }
+
         CELER_VALIDATE(num_photons_ > 0,
                        << "optical gun photon count must be positive");
         CELER_VALIDATE(energy_ > 0,
@@ -169,6 +180,14 @@ namespace legend
             return default_position_;
         }
         return positions_[static_cast<std::size_t>(event_id) % positions_.size()];
+    }
+
+    //---------------------------------------------------------------------------//
+
+    PrimaryGeneratorAction &primary_gun()
+    {
+        CELER_ENSURE(g_instance);
+        return *g_instance;
     }
 
     //---------------------------------------------------------------------------//

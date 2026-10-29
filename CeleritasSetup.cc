@@ -17,6 +17,7 @@
 #include "G4EventManager.hh"
 #include "G4LogicalVolume.hh"
 #include "G4OpticalPhoton.hh"
+#include "G4SystemOfUnits.hh"
 #include "G4VPhysicalVolume.hh"
 
 // Celeritas
@@ -32,6 +33,7 @@
 // Local
 #include "EventOutput.hh"
 #include "FiberSensitiveDetector.hh"
+#include "PrimaryGeneratorAction.hh"
 #include "SipmSensitiveDetector.hh"
 
 namespace legend
@@ -150,6 +152,42 @@ namespace legend
         // Geant4 creates optical photons; Celeritas transports their tracks
         result.offload_particles = {G4OpticalPhoton::Definition()};
         optical.generator = celeritas::inp::OpticalDirectGenerator{};
+        result.optical = std::move(optical);
+        return result;
+    }
+
+    //---------------------------------------------------------------------------//
+    /*!
+     * Build setup options for a standalone Celeritas optical-photon gun.
+     *
+     * No Geant4 particles are offloaded; Celeritas generates the photons
+     * itself from the current LEGEND gun configuration.
+     */
+    celeritas::SetupOptions make_optical_gun_options(CeleritasSetup::Input const &input)
+    {
+        celeritas::SetupOptions result;
+        result.sd.enabled = false;
+        result.make_along_step = celeritas::UniformAlongStepFactory();
+        result.output_file = input.diagnostics_file;
+
+        celeritas::OpticalSetupOptions optical;
+        optical.capacity.tracks = input.num_track_slots;
+        optical.capacity.primaries = 8 * input.num_track_slots;
+        optical.capacity.generators = 2 * input.num_track_slots;
+        optical.detectors.callback = record_optical_hits;
+
+        auto &gun = primary_gun();
+        celeritas::inp::OpticalPrimaryGenerator gen;
+        gen.primaries = static_cast<celeritas::size_type>(gun.num_photons());
+        gen.energy = celeritas::inp::MonoenergeticDistribution{gun.energy() / MeV};
+        gen.angle = celeritas::inp::IsotropicDistribution{};
+        // Celeritas builds one fixed source per run, so only the first
+        // configured gun position (not an added-position list) is used
+        auto const &pos = gun.position(0);
+        gen.shape = celeritas::inp::PointDistribution{
+            {pos.x() / cm, pos.y() / cm, pos.z() / cm}};
+
+        optical.generator = std::move(gen);
         result.optical = std::move(optical);
         return result;
     }

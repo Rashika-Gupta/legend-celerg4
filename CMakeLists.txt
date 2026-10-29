@@ -36,11 +36,13 @@ include(${Geant4_USE_FILE})
 #
 set(legend_celer_sources
   ActionInitialization.cc
+  CelerOpticalGunRunner.cc
   CeleritasSetup.cc
   DetectorConstruction.cc
   EventAction.cc
   EventOutput.cc
   FiberSensitiveDetector.cc
+  OpticalOffloadMode.cc
   PhysicsList.cc
   PrimaryGeneratorAction.cc
   RunAction.cc

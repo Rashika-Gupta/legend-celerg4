@@ -32,18 +32,20 @@
 #include "G4VUserActionInitialization.hh"
 
 #include "DetectorConstruction.hh"
+#include "OpticalOffloadMode.hh"
 
 namespace legend
 {
-//---------------------------------------------------------------------------//
-/*!
- * Install Geant4 user actions for Celeritas optical-photon offload.
- */
-class ActionInitialization final : public G4VUserActionInitialization
-{
+  //---------------------------------------------------------------------------//
+  /*!
+   * Install Geant4 user actions for Celeritas optical-photon offload.
+   */
+  class ActionInitialization final : public G4VUserActionInitialization
+  {
   public:
-    explicit ActionInitialization(SensitiveDetectorType detector_type)
-        : detector_type_(detector_type)
+    ActionInitialization(SensitiveDetectorType detector_type,
+                         OpticalOffloadMode offload_mode)
+        : detector_type_(detector_type), offload_mode_(offload_mode)
     {
     }
 
@@ -55,7 +57,8 @@ class ActionInitialization final : public G4VUserActionInitialization
 
   private:
     SensitiveDetectorType detector_type_;
-};
+    OpticalOffloadMode offload_mode_;
+  };
 
-//---------------------------------------------------------------------------//
+  //---------------------------------------------------------------------------//
 } // namespace legend
