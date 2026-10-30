@@ -53,6 +53,7 @@ namespace legend
             if (offload_mode_ == OpticalOffloadMode::optical_gun)
             {
                 std::cout << "Beginning of run action for optical gun";
+
                 CelerOpticalGunRunner::Instance().BeginOfRunAction();
             }
             else

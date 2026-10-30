@@ -20,6 +20,7 @@ namespace legend
     void ActionInitialization::BuildForMaster() const
     {
         SetUserAction(new RunAction(detector_type_, offload_mode_));
+        new PrimaryGeneratorAction(detector_type_, offload_mode_);
     }
 
     //---------------------------------------------------------------------------//

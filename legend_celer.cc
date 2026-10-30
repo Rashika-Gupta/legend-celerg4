@@ -133,7 +133,7 @@ int main(int argc, char **argv)
         auto &integration = celeritas::TrackingManagerIntegration::Instance();
         physics->RegisterPhysics(
             new celeritas::TrackingManagerConstructor(&integration));
-        integration.SetOptions(legend::CeleritasSetup({})(setup_input));
+        integration.SetOptions(legend::CeleritasSetup(setup_input)());
     }
 
     run_manager->SetUserInitialization(physics);
