@@ -9,8 +9,12 @@
 #include "CelerOpticalGunRunner.hh"
 
 #include <memory>
+#include <mutex>
+#include <ostream>
 #include <string>
 #include <utility>
+
+#include <nlohmann/json.hpp>
 
 #include "G4Threading.hh"
 #include "G4ios.hh"
@@ -20,9 +24,15 @@
 #include "celeritas/optical/CoreState.hh"
 #include "celeritas/optical/Transporter.hh"
 #include "celeritas/optical/gen/PrimaryGeneratorAction.hh"
+#include "celeritas/phys/GeneratorCounters.hh"
+#include "celeritas/phys/GeneratorCountersIO.json.hh"
 #include "corecel/Assert.hh"
 #include "corecel/data/AuxStateVec.hh"
+#include "corecel/io/JsonUtils.json.hh"
+#include "corecel/io/OutputInterfaceAdapter.hh"
+#include "corecel/io/OutputRegistry.hh"
 #include "corecel/sys/Device.hh"
+#include "corecel/sys/ScopedProfiling.hh"
 #include "geocel/GeantUtils.hh"
 #include "corecel/io/Logger.hh"
 
@@ -39,6 +49,78 @@ namespace legend
         };
 
         thread_local LocalOpticalGunState local_state;
+
+        //! Counters summed over all worker threads for JSON output
+        struct GunDiagnostics
+        {
+            celeritas::CounterAccumStats counters;
+        };
+
+        void to_json(nlohmann::json &j, GunDiagnostics const &v)
+        {
+            j = {CELER_JSON_PAIR(v, counters)};
+        }
+
+        std::shared_ptr<GunDiagnostics> const &diagnostics()
+        {
+            static auto const result = std::make_shared<GunDiagnostics>();
+            return result;
+        }
+
+        std::mutex &diagnostics_mutex()
+        {
+            static std::mutex result;
+            return result;
+        }
+
+        void accumulate(celeritas::CounterAccumStats &total,
+                        celeritas::CounterAccumStats const &add)
+        {
+            total.steps += add.steps;
+            total.step_iters += add.step_iters;
+            total.flushes += add.flushes;
+            total.num_cut += add.num_cut;
+            total.num_errored += add.num_errored;
+            if (total.generators.size() < add.generators.size())
+            {
+                total.generators.resize(add.generators.size());
+            }
+            for (std::size_t i = 0; i < add.generators.size(); ++i)
+            {
+                total.generators[i].buffer_size += add.generators[i].buffer_size;
+                total.generators[i].num_pending += add.generators[i].num_pending;
+                total.generators[i].num_generated += add.generators[i].num_generated;
+            }
+        }
+
+        //! Print optical counters
+        struct StreamableCounters
+        {
+            celeritas::CounterAccumStats const &counters;
+        };
+        std::ostream &operator<<(std::ostream &os, StreamableCounters const &sc)
+        {
+            std::size_t num_generated{};
+            std::size_t buffer_size{};
+            for (auto const &gen : sc.counters.generators)
+            {
+                num_generated += gen.num_generated;
+                buffer_size += gen.buffer_size;
+            }
+            os << num_generated << " optical photons from " << buffer_size
+               << " generator distributions with a total of "
+               << sc.counters.steps << " steps over "
+               << sc.counters.step_iters << " step iterations ("
+               << sc.counters.num_cut << " cut, "
+               << sc.counters.num_errored << " errored)";
+            if (sc.counters.step_iters > 0)
+            {
+                os << ", avg "
+                   << static_cast<double>(sc.counters.steps) / static_cast<double>(sc.counters.step_iters)
+                   << " active tracks per iteration";
+            }
+            return os;
+        }
     } // namespace
 
     //---------------------------------------------------------------------------//
@@ -76,6 +158,7 @@ namespace legend
         {
             return;
         }
+        celeritas::ScopedProfiling profile_this{"setup"};
 
         if (G4Threading::IsMasterThread())
         {
@@ -83,6 +166,13 @@ namespace legend
             // uses the latest optical-gun configuration.
             options_ = options_factory_();
             shared_.Initialize(options_);
+
+            *diagnostics() = {};
+            shared_.output_reg()->insert(
+                std::make_shared<celeritas::OutputInterfaceAdapter<GunDiagnostics>>(
+                    celeritas::OutputInterface::Category::result,
+                    "optical_gun",
+                    diagnostics()));
         }
         else
         {
@@ -140,6 +230,7 @@ namespace legend
         CELER_VALIDATE(local_state.state && local_state.transporter && local_state.generator,
                        << "Celeritas optical-gun state is not initialized");
 
+        celeritas::ScopedProfiling profile_this{"run"};
         local_state.state->reseed(local_state.transporter->params()->rng(),
                                   celeritas::id_cast<celeritas::UniqueEventId>(event_id));
 
@@ -175,6 +266,17 @@ namespace legend
         // Release stream-local state before the master destroys shared data.
         if (!G4Threading::IsMultithreadedApplication() || G4Threading::IsWorkerThread())
         {
+            if (local_state.state && local_state.generator)
+            {
+                auto counters = local_state.state->accum();
+                counters.generators.push_back(
+                    local_state.generator->counters(*local_state.state->aux()).accum);
+                CELER_LOG_LOCAL(info) << "Transported " << StreamableCounters{counters};
+
+                std::lock_guard scoped_lock{diagnostics_mutex()};
+                accumulate(diagnostics()->counters, counters);
+            }
+
             local_state = {};
         }
 

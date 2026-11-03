@@ -27,6 +27,7 @@
 #include "accel/TrackingManagerConstructor.hh"
 #include "accel/TrackingManagerIntegration.hh"
 #include "corecel/sys/Environment.hh"
+#include "corecel/sys/ScopedProfiling.hh"
 
 // Local
 #include "ActionInitialization.hh"
@@ -80,6 +81,8 @@ int main(int argc, char **argv)
     char const *geometry_file = argv[interactive ? 2 : 1];
     char const *macro_file = argv[interactive ? 3 : 2];
 
+    celeritas::ScopedProfiling profile_main{"main"};
+
     // SDs are attached during initialization, before the macro runs, so the
     // detector is chosen from the environment
     std::string detector_name = celeritas::getenv("LEGEND_SENSDET");
@@ -108,14 +111,17 @@ int main(int argc, char **argv)
         ui = std::make_unique<G4UIExecutive>(argc, argv);
     }
 
-    std::unique_ptr<G4RunManager> run_manager{
-        G4RunManagerFactory::CreateRunManager(G4RunManagerType::MT)};
-    // Default to hardware concurrency; override with LEGEND_NUM_THREADS for tuning
+    // Determine the number of threads to use for the run manager
     std::string const num_threads_env = celeritas::getenv("LEGEND_NUM_THREADS");
     int const num_threads = num_threads_env.empty()
                                 ? static_cast<int>(G4Threading::G4GetNumberOfCores())
                                 : std::stoi(num_threads_env);
-    run_manager->SetNumberOfThreads(num_threads);
+    std::unique_ptr<G4RunManager> run_manager{G4RunManagerFactory::CreateRunManager(
+        num_threads == 1 ? G4RunManagerType::Serial : G4RunManagerType::MT)};
+    if (num_threads > 1)
+    {
+        run_manager->SetNumberOfThreads(num_threads);
+    }
 
     auto *physics = new legend::PhysicsList;
 
@@ -150,7 +156,11 @@ int main(int argc, char **argv)
 
     auto *ui_manager = G4UImanager::GetUIpointer();
     G4String const execute = "/control/execute ";
-    ui_manager->ApplyCommand(execute + macro_file);
+
+    {
+        celeritas::ScopedProfiling profile_macro{"execute-macro"};
+        ui_manager->ApplyCommand(execute + macro_file);
+    }
 
     if (interactive)
     {

@@ -9,7 +9,6 @@
 
 #include <chrono>
 #include <memory>
-
 // Geant4
 #include "G4GenericMessenger.hh"
 #include "G4String.hh"

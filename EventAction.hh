@@ -8,8 +8,11 @@
 #pragma once
 
 #include <chrono>
+#include <optional>
 // Geant4
 #include "G4UserEventAction.hh"
+
+#include "corecel/sys/ScopedProfiling.hh"
 
 #include "OpticalOffloadMode.hh"
 
@@ -33,6 +36,7 @@ namespace legend
   private:
     OpticalOffloadMode offload_mode_;
     std::chrono::time_point<std::chrono::high_resolution_clock> start_time_;
+    std::optional<celeritas::ScopedProfiling> profile_event_;
   };
 
   //---------------------------------------------------------------------------//

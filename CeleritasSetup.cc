@@ -29,6 +29,7 @@
 #include "corecel/io/Logger.hh"
 #include "geocel/GeantGeoParams.hh"
 #include "geocel/g4/Convert.hh"
+#include "corecel/sys/ScopedProfiling.hh"
 
 // Local
 #include "EventOutput.hh"
@@ -45,6 +46,9 @@ namespace legend
         void record_optical_hits(
             celeritas::Span<celeritas::optical::DetectorHit const> hits)
         {
+            celeritas::ScopedProfiling profile_this{"record-hits"};
+            CELER_LOG_LOCAL(debug) << "Processing " << hits.size() << " hits";
+
             auto const *event = G4EventManager::GetEventManager()->GetConstCurrentEvent();
             CELER_EXPECT(event);
 

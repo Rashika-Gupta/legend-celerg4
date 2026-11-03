@@ -37,6 +37,7 @@ namespace legend
     {
         CELER_EXPECT(event);
 
+        profile_event_.emplace("g4-event");
         event_output().reset();
 
         if (offload_mode_ == OpticalOffloadMode::optical_gun && celeritas::SharedParams::GetMode() == celeritas::OffloadMode::enabled)
@@ -70,6 +71,8 @@ namespace legend
 
         G4cout << "Event " << event->GetEventID() << ", End Time " << event_time
                << " seconds" << G4endl;
+
+        profile_event_.reset();
     }
 
     //---------------------------------------------------------------------------//
