@@ -25,6 +25,7 @@
 
 // Local
 #include "CelerOpticalGunRunner.hh"
+#include "PrimaryGeneratorAction.hh"
 
 namespace legend
 {
@@ -101,6 +102,17 @@ namespace legend
         if (!G4Threading::IsMultithreadedApplication() || G4Threading::IsMasterThread())
         {
             G4cout << "Run time: " << run_time_ << " seconds" << G4endl;
+        }
+
+        // The MT master generates no primaries, so only workers report
+        if (auto const &gt = generation_times(); gt.photons > 0)
+        {
+            double const total = gt.seconds + gt.convert_seconds;
+            G4cout << "Geant4 primary generation: " << gt.seconds
+                   << " s, track conversion: " << gt.convert_seconds
+                   << " s, total " << total << " s for " << gt.photons
+                   << " photons (" << total / gt.photons << " s/photon)"
+                   << G4endl;
         }
 
         auto *analysis_manager = G4AnalysisManager::Instance();

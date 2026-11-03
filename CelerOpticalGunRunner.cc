@@ -9,9 +9,11 @@
 #include "CelerOpticalGunRunner.hh"
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "G4Threading.hh"
+#include "G4ios.hh"
 
 #include "celeritas/Types.hh"
 #include "celeritas/optical/CoreParams.hh"
@@ -145,6 +147,18 @@ namespace legend
         // transports every generated photon to completion.
         local_state.generator->insert(*local_state.state);
         (*local_state.transporter)(*local_state.state);
+
+        // Sampling runs in the generate action inside the transporter, not in insert()
+        auto const times = local_state.transporter->exchange_action_times(
+            *local_state.state->aux());
+        for (auto const &[label, seconds] : times)
+        {
+            if (label.find("generate") != std::string::npos)
+            {
+                G4cout << "Celeritas event " << event_id << " " << label
+                       << " time " << seconds << " s" << G4endl;
+            }
+        }
     }
 
     //---------------------------------------------------------------------------//

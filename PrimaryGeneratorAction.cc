@@ -8,6 +8,7 @@
 
 #include "PrimaryGeneratorAction.hh"
 
+#include <chrono>
 #include <cmath>
 
 // Geant4
@@ -29,6 +30,9 @@ namespace legend
     namespace
     {
         thread_local PrimaryGeneratorAction *g_instance = nullptr;
+        thread_local GenerationTimes g_times;
+        thread_local std::chrono::steady_clock::time_point g_generated_at;
+        thread_local bool g_awaiting_first_track = false;
         //---------------------------------------------------------------------------//
         //! Sample an isotropic unit direction.
         G4ThreeVector sample_isotropic()
@@ -154,6 +158,7 @@ namespace legend
                        << "optical gun energy must be positive");
 
         auto const &pos = this->position(event->GetEventID());
+        auto const gen_start = std::chrono::steady_clock::now();
         auto *vertex = new G4PrimaryVertex(pos, 0);
         for (G4int i = 0; i < num_photons_; ++i)
         {
@@ -165,6 +170,11 @@ namespace legend
             vertex->SetPrimary(primary);
         }
         event->AddPrimaryVertex(vertex);
+        auto const gen_end = std::chrono::steady_clock::now();
+        g_times.seconds += std::chrono::duration<double>(gen_end - gen_start).count();
+        g_times.photons += num_photons_;
+        g_generated_at = gen_end;
+        g_awaiting_first_track = true;
 
         G4cout << "Event " << event->GetEventID() << ": " << num_photons_
                << " photons of " << energy_ / eV << " eV at " << pos / mm
@@ -188,6 +198,27 @@ namespace legend
     {
         CELER_ENSURE(g_instance);
         return *g_instance;
+    }
+
+    //---------------------------------------------------------------------------//
+
+    GenerationTimes &generation_times()
+    {
+        return g_times;
+    }
+
+    //---------------------------------------------------------------------------//
+
+    void mark_first_track()
+    {
+        if (!g_awaiting_first_track)
+        {
+            return;
+        }
+        g_awaiting_first_track = false;
+        g_times.convert_seconds += std::chrono::duration<double>(
+                                       std::chrono::steady_clock::now() - g_generated_at)
+                                       .count();
     }
 
     //---------------------------------------------------------------------------//

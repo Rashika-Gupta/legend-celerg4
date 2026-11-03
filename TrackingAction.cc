@@ -8,6 +8,8 @@
 
 #include "TrackingAction.hh"
 
+#include "PrimaryGeneratorAction.hh"
+
 // Geant4
 #include "G4OpticalPhoton.hh"
 #include "G4Track.hh"
@@ -26,6 +28,8 @@ void TrackingAction::PreUserTrackingAction(G4Track const* track)
 {
     CELER_EXPECT(track);
     CELER_ASSERT(fpTrackingManager);
+
+    mark_first_track();
 
     bool const store_trajectory
         = track->GetParticleDefinition() != G4OpticalPhoton::Definition();

@@ -79,4 +79,18 @@ namespace legend
   PrimaryGeneratorAction &primary_gun();
 
   //---------------------------------------------------------------------------//
+  //! Accumulated Geant4 primary-generation timings on this thread.
+  struct GenerationTimes
+  {
+    double seconds{0};         //!< Sampling and G4PrimaryParticle creation
+    double convert_seconds{0}; //!< Primary-to-track conversion until first track
+    long photons{0};
+  };
+
+  GenerationTimes &generation_times();
+
+  //! Close the conversion timer when the first track of an event starts.
+  void mark_first_track();
+
+  //---------------------------------------------------------------------------//
 } // namespace legend
